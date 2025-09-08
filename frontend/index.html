@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exec Coaching App — Login</title>
+<style>
+  body { margin:0; background:#f6f7fb; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; display:grid; place-items:center; min-height:100vh; }
+  .card { background:#fff; padding:24px; width:min(460px, 92vw); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.07); }
+  h1 { margin:0 0 8px; font-size:22px; }
+  p.sub { margin:0 0 16px; color:#6b7280; }
+  .status { display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:8px; }
+  .dot { width:10px; height:10px; border-radius:999px; background:#d1d5db; } .ok{background:#10b981}.bad{background:#ef4444}
+  label{display:block;margin:10px 0 6px;font-weight:600;font-size:13px;color:#374151}
+  input{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
+  input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+  button{width:100%;margin-top:12px;padding:10px;border:0;background:#111827;color:#fff;border-radius:10px;font-weight:600;cursor:pointer}
+  .msg{margin-top:8px;font-size:13px}
+  .link{margin-top:10px;text-align:right;font-size:13px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Welcome</h1>
+  <p class="sub">Sign in to your coach account</p>
+  <div class="status"><span id="dot" class="dot"></span><span id="status">Checking server...</span></div>
+  <label>Email</label><input id="email" type="email" placeholder="coach1@example.com" required>
+  <label>Password</label><input id="password" type="password" placeholder="coach123" required>
+  <button id="btn">Sign in</button>
+  <div class="link"><a href="#" id="createCoach">Create a new coach profile</a></div>
+  <div id="msg" class="msg"></div>
+</div>
+<script>
+const API = localStorage.getItem("apiUrl") || "http://localhost:8000";
+const dot = document.getElementById("dot"), st = document.getElementById("status"), msg = document.getElementById("msg");
+async function ping(){
+  try{ const r=await fetch(API+"/health"); if(!r.ok) throw 0; const j=await r.json(); st.textContent=(j.ok&&j.db_ok)?"Server connected":"Server reachable, DB issue"; dot.classList.add("ok"); dot.classList.remove("bad"); }
+  catch{ st.textContent="Server not reachable"; dot.classList.add("bad"); dot.classList.remove("ok"); }
+}
+ping(); setInterval(ping,5000);
+document.getElementById("btn").onclick = async ()=>{
+  msg.textContent="";
+  try{
+    const email=document.getElementById("email").value.trim();
+    const password=document.getElementById("password").value;
+    const r=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+    if(!r.ok){ const er=await r.json().catch(()=>({detail:"Login failed"})); throw new Error(er.detail||"Login failed"); }
+    const user=await r.json();
+    if(user.role!=="coach") throw new Error("Only coach accounts can sign in here.");
+    localStorage.setItem("user", JSON.stringify(user));
+    window.location.href="dashboard.html";
+  }catch(e){ msg.textContent=e.message; msg.style.color="#991b1b"; }
+};
+document.getElementById("createCoach").onclick = async (e)=>{
+  e.preventDefault();
+  const email=prompt("Coach email:"); if(!email) return;
+  const first=prompt("First name (optional):")||"";
+  const last=prompt("Last name (optional):")||"";
+  const password=prompt("Temporary password (min 6 chars):")||"coach123";
+  try{
+    const r=await fetch(API+"/dev/create-coach",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,first_name:first,last_name:last,password})});
+    if(!r.ok){ const er=await r.json().catch(()=>({detail:"Failed to create"})); throw new Error(er.detail||"Create failed"); }
+    alert("Coach created. You can now log in with "+email);
+    document.getElementById("email").value=email;
+    document.getElementById("password").value=password;
+  }catch(e){ alert(e.message); }
+};
+</script>
+</body>
+</html>
