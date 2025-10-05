@@ -143,14 +143,25 @@ def update_coach_profile(
     coach.coach_status = coach_status
 
     if coach_photo:
-        file_path = os.path.join(UPLOAD_DIR, coach_photo.filename)
+        file_path = os.path.join("frontend", "uploads", coach_photo.filename)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(coach_photo.file, buffer)
-        coach.coach_photo = file_path
+        coach.coach_photo = f"/frontend/uploads/{coach_photo.filename}"
 
     db.commit()
     db.refresh(coach)
-    return {"status": "updated", "coach": coach.coach_firstname}
+
+    return {
+        "id": coach.coach_id,
+        "firstname": coach.coach_firstname,
+        "lastname": coach.coach_lastname,
+        "email": coach.coach_email,
+        "qualifications": coach.coach_qualifications,
+        "profile": coach.coach_profile,
+        "status": coach.coach_status,
+        "photo": coach.coach_photo,
+    }
 
 @app.get("/coach/{coach_id}/coachees")
 def get_coachees_for_coach(coach_id: int, db: Session = Depends(get_db)):
@@ -185,6 +196,108 @@ def get_pending_sessions(coach_id: int, db: Session = Depends(get_db)):
         }
         for s in sessions
     ]
+
+# ---------------------------------------------------------------------
+# Coachee endpoints
+# ---------------------------------------------------------------------
+
+@app.get("/coachee/{coachee_id}")
+def get_coachee_detail(coachee_id: int, db: Session = Depends(get_db)):
+    coachee = db.query(Coachee).filter(Coachee.coachee_id == coachee_id).first()
+    if not coachee:
+        raise HTTPException(status_code=404, detail="Coachee not found")
+    return {
+        "id": coachee.coachee_id,
+        "firstname": coachee.coachee_firstname,
+        "lastname": coachee.coachee_lastname,
+        "email": coachee.coachee_email,
+        "org": coachee.coachee_org,
+        "background": coachee.coachee_background,
+        "education": coachee.coachee_edu,
+        "challenges": coachee.coachee_challenges,
+        "goals": coachee.coachee_goals,
+        "status": coachee.coachee_status,
+    }
+
+
+@app.get("/coachee/{coachee_id}/sessions")
+def get_coachee_sessions(coachee_id: int, db: Session = Depends(get_db)):
+    sessions = db.query(CoachingSession).filter(CoachingSession.session_coachee == coachee_id).all()
+    return [
+        {
+            "id": s.session_id,
+            "date": s.session_date,
+            "topic": s.session_topic,
+            "coach_id": s.session_coach,
+            "status": "completed" if s.session_nextsteps else "pending",
+        }
+        for s in sessions
+    ]
+
+
+@app.get("/coachee/{coachee_id}/assignments")
+def get_coachee_assignments(coachee_id: int, db: Session = Depends(get_db)):
+    assignments = db.query(Assignment).filter(Assignment.assignment_coachee == coachee_id).all()
+    return [
+        {
+            "id": a.assignment_id,
+            "description": a.assignment_description,
+            "duedate": a.assignment_duedate,
+            "status": a.assignment_status,
+            "coach": a.assignment_coach,
+        }
+        for a in assignments
+    ]
+
+# ---------------------------------------------------------------------
+# Coach - add/remove coachee (simple placeholder logic)
+# ---------------------------------------------------------------------
+
+@app.post("/coach/{coach_id}/add_coachee")
+def add_coachee(coach_id: int, email: str = Form(...), db: Session = Depends(get_db)):
+    coachee = db.query(Coachee).filter(Coachee.coachee_email == email).first()
+    if not coachee:
+        raise HTTPException(status_code=404, detail="Coachee not found")
+
+    # Example: link via a dummy CoachingSession if not already linked
+    existing = (
+        db.query(CoachingSession)
+        .filter(
+            CoachingSession.session_coach == coach_id,
+            CoachingSession.session_coachee == coachee.coachee_id,
+        )
+        .first()
+    )
+    if existing:
+        return {"status": "already_assigned"}
+
+    new_session = CoachingSession(
+        session_coach=coach_id,
+        session_coachee=coachee.coachee_id,
+        session_topic="Initial Coaching Link",
+        session_date="2025-10-05 12:00",
+        session_goals="Initial assignment to coach",
+    )
+    db.add(new_session)
+    db.commit()
+    return {"status": "added", "coachee_id": coachee.coachee_id}
+
+
+@app.delete("/coach/{coach_id}/remove_coachee/{coachee_id}")
+def remove_coachee(coach_id: int, coachee_id: int, db: Session = Depends(get_db)):
+    sessions = (
+        db.query(CoachingSession)
+        .filter(
+            CoachingSession.session_coach == coach_id,
+            CoachingSession.session_coachee == coachee_id,
+        )
+        .all()
+    )
+    for s in sessions:
+        db.delete(s)
+    db.commit()
+    return {"status": "removed", "coachee_id": coachee_id}
+
 
 # ---------------------------------------------------------------------
 # Startup event
