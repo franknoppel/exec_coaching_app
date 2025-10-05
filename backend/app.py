@@ -1,312 +1,97 @@
-from fastapi import FastAPI, Form, UploadFile, File, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
+# backend/app.py
+from fastapi import FastAPI, Request, UploadFile, File, Form
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
-from backend.database import SessionLocal, Base, engine
-from backend.models import (
-    Administrator,
-    CoachOrganization,
-    Coach,
-    CoacheeOrganization,
-    Coachee,
-    CoachingSession,
-    Assignment,
-)
-from backend.seed import seed_dummy_data
+from fastapi.templating import Jinja2Templates
+from pathlib import Path
+from typing import Optional
 import shutil
-import os
 
-# ---------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------
-app = FastAPI(title="Coach APP Backend")
+app = FastAPI(title="Executive Coaching App")
 
-app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+# ---- Folders ----
+BASE_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
+UPLOADS_DIR = STATIC_DIR / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ---- Static & templates ----
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-Base.metadata.create_all(bind=engine)
-seed_dummy_data(SessionLocal)
+# ---- Demo in-memory state (swap to your DB when ready) ----
+COACHEES = []          # [{id, name}]
+SESSIONS = {}          # {coachee_id: [{id, title, date, notes}]}
+_next_id = 1
+def next_id():
+    global _next_id
+    i = _next_id
+    _next_id += 1
+    return i
 
-# ---------------------------------------------------------------------
-# Dependency
-# ---------------------------------------------------------------------
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# ---- Web page ----
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request, "title": "Executive Coaching Dashboard"}
+    )
 
-# ---------------------------------------------------------------------
-# Basic routes
-# ---------------------------------------------------------------------
-@app.get("/ping")
-def ping():
-    return {"status": "ok"}
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
-# ---------------------------------------------------------------------
-# Login route
-# ---------------------------------------------------------------------
-@app.post("/login")
-def login(email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user_models = [
-        (Administrator, "admin_email"),
-        (CoachOrganization, "coorg_email"),
-        (Coach, "coach_email"),
-        (CoacheeOrganization, "coe_email"),
-        (Coachee, "coachee_email"),
-    ]
+# ---- API: coachees ----
+@app.get("/api/coachees")
+def list_coachees():
+    return {"items": COACHEES}
 
-    for model, email_field in user_models:
-        try:
-            user = db.query(model).filter_by(**{email_field: email}).first()
-            if not user:
-                continue
-            pw_field = f"{email_field.split('_')[0]}_password"
-            if getattr(user, pw_field, None) == password:
-                role = model.__name__.lower()
-                return {"id": getattr(user, f"{role}_id"), "role": role}
-        except Exception as e:
-            print(f"Login error for {model.__name__}: {e}")
-            continue
+@app.post("/api/coachees")
+def add_coachee(name: str):
+    cid = next_id()
+    COACHEES.append({"id": cid, "name": name})
+    SESSIONS.setdefault(cid, [])
+    return {"status": "added", "id": cid, "name": name}
 
-    raise HTTPException(status_code=401, detail="Invalid email or password")
+@app.delete("/api/coachees/{coachee_id}")
+def remove_coachee(coachee_id: int):
+    global COACHEES
+    COACHEES = [c for c in COACHEES if c["id"] != coachee_id]
+    SESSIONS.pop(coachee_id, None)
+    return {"status": "removed", "id": coachee_id}
 
-# ---------------------------------------------------------------------
-# File upload/download
-# ---------------------------------------------------------------------
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# ---- API: sessions (filtered per coachee) ----
+@app.get("/api/coachees/{coachee_id}/sessions")
+def list_sessions(coachee_id: int):
+    return {"items": SESSIONS.get(coachee_id, [])}
 
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return {"filename": file.filename, "status": "uploaded"}
+@app.get("/api/sessions/{session_id}")
+def get_session(session_id: int):
+    for lst in SESSIONS.values():
+        for s in lst:
+            if s.get("id") == session_id:
+                return s
+    return {"error": "not found"}
 
-@app.get("/download/{filename}")
-async def download_file(filename: str):
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path, media_type="application/octet-stream", filename=filename)
-
-# ---------------------------------------------------------------------
-# Coach-related endpoints
-# ---------------------------------------------------------------------
-@app.get("/coach/{coach_id}")
-def get_coach_profile(coach_id: int, db: Session = Depends(get_db)):
-    coach = db.query(Coach).filter(Coach.coach_id == coach_id).first()
-    if not coach:
-        raise HTTPException(status_code=404, detail="Coach not found")
-    return {
-        "id": coach.coach_id,
-        "firstname": coach.coach_firstname,
-        "lastname": coach.coach_lastname,
-        "email": coach.coach_email,
-        "qualifications": coach.coach_qualifications,
-        "profile": coach.coach_profile,
-        "status": coach.coach_status,
-        "photo": coach.coach_photo,
-    }
-
-@app.put("/coach/{coach_id}")
-def update_coach_profile(
-    coach_id: int,
-    coach_firstname: str = Form(...),
-    coach_lastname: str = Form(...),
-    coach_email: str = Form(...),
-    coach_qualifications: str = Form(...),
-    coach_profile: str = Form(...),
-    coach_status: bool = Form(...),
-    coach_photo: UploadFile = File(None),
-    db: Session = Depends(get_db),
+# ---- API: coach profile + photo upload ----
+@app.post("/api/coach/profile")
+async def update_profile(
+    name: str = Form(...),
+    bio: str = Form(""),
+    photo: Optional[UploadFile] = File(None),
 ):
-    coach = db.query(Coach).filter(Coach.coach_id == coach_id).first()
-    if not coach:
-        raise HTTPException(status_code=404, detail="Coach not found")
+    photo_url = None
+    if photo:
+        suffix = Path(photo.filename).suffix
+        dest = UPLOADS_DIR / f"coach_photo{suffix or ''}"
+        with dest.open("wb") as f:
+            shutil.copyfileobj(photo.file, f)
+        photo_url = f"/static/uploads/{dest.name}"
+    # TODO: persist name/bio/photo_url to DB
+    return {"status": "saved", "name": name, "bio": bio, "photo_url": photo_url}
 
-    coach.coach_firstname = coach_firstname
-    coach.coach_lastname = coach_lastname
-    coach.coach_email = coach_email
-    coach.coach_qualifications = coach_qualifications
-    coach.coach_profile = coach_profile
-    coach.coach_status = coach_status
-
-    if coach_photo:
-        file_path = os.path.join("frontend", "uploads", coach_photo.filename)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(coach_photo.file, buffer)
-        coach.coach_photo = f"/frontend/uploads/{coach_photo.filename}"
-
-    db.commit()
-    db.refresh(coach)
-
-    return {
-        "id": coach.coach_id,
-        "firstname": coach.coach_firstname,
-        "lastname": coach.coach_lastname,
-        "email": coach.coach_email,
-        "qualifications": coach.coach_qualifications,
-        "profile": coach.coach_profile,
-        "status": coach.coach_status,
-        "photo": coach.coach_photo,
-    }
-
-@app.get("/coach/{coach_id}/coachees")
-def get_coachees_for_coach(coach_id: int, db: Session = Depends(get_db)):
-    sessions = db.query(CoachingSession).filter(CoachingSession.session_coach == coach_id).all()
-    coachee_ids = {s.session_coachee for s in sessions}
-    coachees = db.query(Coachee).filter(Coachee.coachee_id.in_(coachee_ids)).all()
-    return [
-        {
-            "id": c.coachee_id,
-            "firstname": c.coachee_firstname,
-            "lastname": c.coachee_lastname,
-            "email": c.coachee_email,
-            "status": c.coachee_status,
-        }
-        for c in coachees
-    ]
-
-@app.get("/coach/{coach_id}/sessions")
-def get_pending_sessions(coach_id: int, db: Session = Depends(get_db)):
-    sessions = (
-        db.query(CoachingSession)
-        .filter(CoachingSession.session_coach == coach_id)
-        .order_by(CoachingSession.session_date.desc())
-        .all()
-    )
-    return [
-        {
-            "id": s.session_id,
-            "date": s.session_date,
-            "topic": s.session_topic,
-            "status": "completed" if s.session_nextsteps else "pending",
-        }
-        for s in sessions
-    ]
-
-# ---------------------------------------------------------------------
-# Coachee endpoints
-# ---------------------------------------------------------------------
-
-@app.get("/coachee/{coachee_id}")
-def get_coachee_detail(coachee_id: int, db: Session = Depends(get_db)):
-    coachee = db.query(Coachee).filter(Coachee.coachee_id == coachee_id).first()
-    if not coachee:
-        raise HTTPException(status_code=404, detail="Coachee not found")
-    return {
-        "id": coachee.coachee_id,
-        "firstname": coachee.coachee_firstname,
-        "lastname": coachee.coachee_lastname,
-        "email": coachee.coachee_email,
-        "org": coachee.coachee_org,
-        "background": coachee.coachee_background,
-        "education": coachee.coachee_edu,
-        "challenges": coachee.coachee_challenges,
-        "goals": coachee.coachee_goals,
-        "status": coachee.coachee_status,
-    }
-
-
-@app.get("/coachee/{coachee_id}/sessions")
-def get_coachee_sessions(coachee_id: int, db: Session = Depends(get_db)):
-    sessions = db.query(CoachingSession).filter(CoachingSession.session_coachee == coachee_id).all()
-    return [
-        {
-            "id": s.session_id,
-            "date": s.session_date,
-            "topic": s.session_topic,
-            "coach_id": s.session_coach,
-            "status": "completed" if s.session_nextsteps else "pending",
-        }
-        for s in sessions
-    ]
-
-
-@app.get("/coachee/{coachee_id}/assignments")
-def get_coachee_assignments(coachee_id: int, db: Session = Depends(get_db)):
-    assignments = db.query(Assignment).filter(Assignment.assignment_coachee == coachee_id).all()
-    return [
-        {
-            "id": a.assignment_id,
-            "description": a.assignment_description,
-            "duedate": a.assignment_duedate,
-            "status": a.assignment_status,
-            "coach": a.assignment_coach,
-        }
-        for a in assignments
-    ]
-
-# ---------------------------------------------------------------------
-# Coach - add/remove coachee (simple placeholder logic)
-# ---------------------------------------------------------------------
-
-@app.post("/coach/{coach_id}/add_coachee")
-def add_coachee(coach_id: int, email: str = Form(...), db: Session = Depends(get_db)):
-    coachee = db.query(Coachee).filter(Coachee.coachee_email == email).first()
-    if not coachee:
-        raise HTTPException(status_code=404, detail="Coachee not found")
-
-    # Example: link via a dummy CoachingSession if not already linked
-    existing = (
-        db.query(CoachingSession)
-        .filter(
-            CoachingSession.session_coach == coach_id,
-            CoachingSession.session_coachee == coachee.coachee_id,
-        )
-        .first()
-    )
-    if existing:
-        return {"status": "already_assigned"}
-
-    new_session = CoachingSession(
-        session_coach=coach_id,
-        session_coachee=coachee.coachee_id,
-        session_topic="Initial Coaching Link",
-        session_date="2025-10-05 12:00",
-        session_goals="Initial assignment to coach",
-    )
-    db.add(new_session)
-    db.commit()
-    return {"status": "added", "coachee_id": coachee.coachee_id}
-
-
-@app.delete("/coach/{coach_id}/remove_coachee/{coachee_id}")
-def remove_coachee(coach_id: int, coachee_id: int, db: Session = Depends(get_db)):
-    sessions = (
-        db.query(CoachingSession)
-        .filter(
-            CoachingSession.session_coach == coach_id,
-            CoachingSession.session_coachee == coachee_id,
-        )
-        .all()
-    )
-    for s in sessions:
-        db.delete(s)
-    db.commit()
-    return {"status": "removed", "coachee_id": coachee_id}
-
-
-# ---------------------------------------------------------------------
-# Startup event
-# ---------------------------------------------------------------------
-@app.on_event("startup")
-def startup_event():
-    print("🌱 Seeding database with dummy data...")
-    try:
-        seed_dummy_data(SessionLocal)
-        print("✅ Dummy data seeded successfully!")
-    except Exception as e:
-        print(f"⚠️ Seeding failed: {e}")
+# Optional: allow `python backend/app.py` direct run
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)
