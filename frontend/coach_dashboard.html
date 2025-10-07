@@ -5,75 +5,201 @@
   <title>Coach Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="css/style.css" rel="stylesheet" />
-  <!-- Optional: Bootstrap for nicer defaults -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    /* Simple modal styles */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      z-index: 1000;
+    }
+    .modal-backdrop.show {
+      display: block;
+    }
+    .modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      max-width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
+      display: none;
+      z-index: 1001;
+      padding: 20px;
+    }
+    .modal.show {
+      display: block;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .modal-header h5 {
+      margin: 0;
+    }
+    .btn-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      line-height: 1;
+    }
+    .modal-body {
+      margin-bottom: 20px;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #dee2e6;
+    }
+    .card {
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .card-body {
+      padding: 15px;
+    }
+    .btn {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      background: white;
+    }
+    .btn-primary {
+      background: #007bff;
+      color: white;
+      border-color: #007bff;
+    }
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+      border-color: #6c757d;
+    }
+    .btn-danger {
+      background: #dc3545;
+      color: white;
+      border-color: #dc3545;
+    }
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 14px;
+    }
+    .btn-outline-primary {
+      background: white;
+      color: #007bff;
+      border-color: #007bff;
+    }
+    .btn-outline-secondary {
+      background: white;
+      color: #6c757d;
+      border-color: #6c757d;
+    }
+    .btn-outline-danger {
+      background: white;
+      color: #dc3545;
+      border-color: #dc3545;
+    }
+    .form-control {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+    .form-label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    .mb-3 {
+      margin-bottom: 15px;
+    }
+    .d-flex {
+      display: flex;
+    }
+    .justify-content-between {
+      justify-content: space-between;
+    }
+    .justify-content-end {
+      justify-content: flex-end;
+    }
+    .gap-2 {
+      gap: 10px;
+    }
+    .text-muted {
+      color: #6c757d;
+    }
+    .list-group-item {
+      padding: 12px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .list-group-item:last-child {
+      border-bottom: none;
+    }
+  </style>
 </head>
-<body class="bg-light">
-  <nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-      <span class="navbar-brand mb-0 h1">Executive Coaching — Coach Dashboard</span>
-      <a class="btn btn-outline-light btn-sm" href="index.html">Log out</a>
+<body style="font-family: system-ui, -apple-system, sans-serif; background: #f8f9fa; margin: 0; padding: 0;">
+  <nav style="background: #343a40; color: white; padding: 15px;">
+    <div style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 18px; font-weight: 500;">Executive Coaching — Coach Dashboard</span>
+      <a href="index.html" style="color: white; text-decoration: none; padding: 6px 12px; border: 1px solid white; border-radius: 4px;">Log out</a>
     </div>
   </nav>
 
-  <main class="container my-4">
-    <div class="row g-4">
+  <main style="max-width: 1200px; margin: 20px auto; padding: 0 15px;">
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
       <!-- Coach Profile -->
-      <section class="col-12 col-lg-5">
-        <div class="card shadow-sm">
+      <section>
+        <div class="card">
           <div class="card-body">
-            <h2 class="h5 mb-3">Coach Profile</h2>
-            <div class="d-flex align-items-start gap-3">
-              <img id="coachPhoto" alt="Coach photo" class="rounded" style="display:none;max-width:140px;">
-              <div class="flex-grow-1">
+            <h2 style="font-size: 18px; margin-bottom: 15px;">Coach Profile</h2>
+            <div style="display: flex; gap: 15px;">
+              <img id="coachPhoto" alt="Coach photo" style="display:none; max-width:100px; border-radius: 4px;">
+              <div style="flex-grow: 1;">
                 <div><strong>Name:</strong> <span id="coachName">—</span></div>
                 <div><strong>Email:</strong> <span id="coachEmail">—</span></div>
-                <div class="mt-2"><strong>Bio:</strong> <span id="coachBio">—</span></div>
+                <div style="margin-top: 10px;"><strong>Bio:</strong> <span id="coachBio">—</span></div>
               </div>
             </div>
-            <hr class="my-3">
-            <form id="profileForm" enctype="multipart/form-data">
-              <div class="row g-2">
-                <div class="col-12">
-                  <input class="form-control" name="name" placeholder="Your name" required />
-                </div>
-                <div class="col-12">
-                  <input class="form-control" name="bio" placeholder="Short bio" />
-                </div>
-                <div class="col-12">
-                  <input class="form-control" type="file" name="photo" accept="image/*" />
-                </div>
-                <div class="col-12">
-                  <button class="btn btn-dark w-100" type="submit">Save Profile</button>
-                </div>
-              </div>
-              <div id="profileResult" class="text-success mt-2" style="display:none;">Saved!</div>
-            </form>
           </div>
         </div>
       </section>
 
       <!-- Coachees -->
-      <section class="col-12 col-lg-7">
-        <div class="card shadow-sm">
+      <section>
+        <div class="card">
           <div class="card-body">
-            <h2 class="h5 mb-3">Coachees</h2>
-            <div id="coachees" class="list-group mb-3"></div>
-
-            <form id="addForm" class="row g-2">
-              <div class="col-8">
-                <input class="form-control" name="name" placeholder="Add coachee…" required />
-              </div>
-              <div class="col-4">
-                <button class="btn btn-dark w-100" type="submit">Add</button>
-              </div>
-            </form>
+            <h2 style="font-size: 18px; margin-bottom: 15px;">Coachees</h2>
+            <div id="coachees" style="border: 1px solid #dee2e6; border-radius: 4px;"></div>
           </div>
         </div>
       </section>
     </div>
   </main>
 
-  <script type="module" src="js/coach_dashboard.js"></script>
+  <div id="modalBackdrop" class="modal-backdrop"></div>
+  <div id="modalContainer"></div>
+
+  <script src="js/coach_dashboard.js"></script>
 </body>
 </html>
