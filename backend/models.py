@@ -41,6 +41,7 @@ class Coach(Base):
     __tablename__ = "coaches"
 
     coach_id = Column(Integer, primary_key=True, index=True)
+    coach_title = Column(String, default="Mr")
     coach_firstname = Column(String)
     coach_lastname = Column(String)
     coach_email = Column(String, unique=True, index=True)
@@ -111,6 +112,7 @@ class CoachingSession(Base):
     session_goals = Column(Text)
     session_nextsteps = Column(Text)
     session_attachments = Column(String)
+    session_status = Column(String, default="open")  # 'open' or 'completed'
 
     coach = relationship("Coach", back_populates="sessions")
     coachee = relationship("Coachee", back_populates="sessions")

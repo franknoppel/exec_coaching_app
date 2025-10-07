@@ -7,17 +7,48 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
   <style>
+    /* Brand color: change this to match your site (e.g. #123456) */
+    :root { --brand-color: #003333; }
     body { background: #f8f9fa; }
     .card { border-radius: 12px; box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
-    .nav-tabs .nav-link.active { background-color: #0d6efd; color: #fff !important; }
+    /* Override Bootstrap primary/nav active to use brand color */
+    .navbar.bg-primary, .navbar.bg-primary {
+      background-color: var(--brand-color) !important;
+    }
+    .nav-tabs .nav-link.active { background-color: var(--brand-color) !important; color: #fff !important; }
     .modal-lg { max-width: 900px; }
+    /* Ensure small title before name is normal weight */
+    .coach-title { font-weight: 400; }
+    /* Make coachee textareas taller so more content is visible when viewing details
+       Apply to Background, Education, Challenges and Goals. Aim for ~10 lines. */
+    #coacheeDetailInfo textarea#coachee_background,
+    #coacheeDetailInfo textarea#coachee_edu,
+    #coacheeDetailInfo textarea#coachee_challenges,
+    #coacheeDetailInfo textarea#coachee_goals {
+      height: calc(1.25em * 10); /* roughly 10 lines */
+      max-height: 40rem;
+      resize: vertical;
+      line-height: 1.25em;
+      padding: 0.6rem;
+    }
+
+    /* Clearer layout inside coachee modal */
+    #coacheeDetailInfo { margin-top: 0.5rem; }
+    #coacheeDetailInfo .form-label { font-weight: 600; color: #222; }
+    #coacheeDetailInfo .form-control, #coacheeDetailInfo .form-select { background: #fff; }
+    #coachee_photo_preview img { border-radius: 8px; max-width: 220px; max-height: 220px; object-fit: cover; }
+    #coacheeDetailModal .modal-body { padding-bottom: 0.5rem; }
+    /* Improve spacing between fields */
+    #coacheeDetailInfo .row.g-2 > div { padding-bottom: 0.6rem; }
   </style>
 </head>
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
       <span class="navbar-brand">Coach Dashboard</span>
-      <button class="btn btn-light btn-sm" id="logoutBtn">Logout</button>
+      <div>
+        <button class="btn btn-light btn-sm" id="logoutBtn">Logout</button>
+      </div>
     </div>
   </nav>
 
@@ -68,13 +99,23 @@
         <div class="modal-body">
           <form id="profileForm">
             <div class="row g-3">
-              <div class="col-md-6"><label class="form-label">First Name</label><input type="text" id="coach_firstname" class="form-control" required></div>
-              <div class="col-md-6"><label class="form-label">Last Name</label><input type="text" id="coach_lastname" class="form-control" required></div>
+              <div class="col-md-3">
+                <label class="form-label">Title</label>
+                <select id="coach_title" class="form-select">
+                  <option value="Mr">Mr</option>
+                  <option value="Ms">Ms</option>
+                  <option value="Mrs">Mrs</option>
+                  <option value="Dr">Dr</option>
+                  <option value="Prof">Prof</option>
+                </select>
+              </div>
+              <div class="col-md-3"><label class="form-label">First Name</label><input type="text" id="coach_firstname" class="form-control" required></div>
+              <div class="col-md-3"><label class="form-label">Last Name</label><input type="text" id="coach_lastname" class="form-control" required></div>
+              <div class="col-md-3"><label class="form-label">Status</label><select id="coach_status" class="form-select"><option value="true">Active</option><option value="false">Inactive</option></select></div>
               <div class="col-md-6"><label class="form-label">Email</label><input type="email" id="coach_email" class="form-control" required></div>
-              <div class="col-md-6"><label class="form-label">Status</label><select id="coach_status" class="form-select"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+              <div class="col-md-6"><label class="form-label">Photo</label><input type="file" id="coach_photo" class="form-control" accept="image/*"></div>
               <div class="col-md-12"><label class="form-label">Qualifications</label><textarea id="coach_qualifications" class="form-control" rows="2"></textarea></div>
               <div class="col-md-12"><label class="form-label">Profile</label><textarea id="coach_profile" class="form-control" rows="3"></textarea></div>
-              <div class="col-md-12"><label class="form-label">Photo</label><input type="file" id="coach_photo" class="form-control" accept="image/*"></div>
             </div>
           </form>
         </div>
@@ -85,16 +126,58 @@
 
   <!-- Add Coachee Modal -->
   <div class="modal fade" id="addCoacheeModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title">Add Coachee</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-header"><h5 class="modal-title">Create Coachee Profile</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <input id="newCoacheeEmail" class="form-control" placeholder="Coachee Email">
+          <form id="createCoacheeForm">
+            <div class="row g-3" id="createCoacheeFields">
+              <div class="col-md-4"><label class="form-label">First Name</label><input id="new_coachee_firstname" class="form-control"></div>
+              <div class="col-md-4"><label class="form-label">Last Name</label><input id="new_coachee_lastname" class="form-control"></div>
+              <div class="col-md-4"><label class="form-label">Email</label><input id="new_coachee_email" class="form-control" type="email"></div>
+              <div class="col-md-6"><label class="form-label">Organization</label>
+                <div class="d-flex">
+                  <select id="new_coachee_org" class="form-select"><option value="">Loading...</option></select>
+                  <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="addNewCoacheeOrgBtn" title="Add organization">＋</button>
+                </div>
+              </div>
+              <div class="col-md-6"><label class="form-label">Status</label><select id="new_coachee_status" class="form-select"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+              <div class="col-md-6"><label class="form-label">Photo</label><input id="new_coachee_photo" type="file" accept="image/*" class="form-control"></div>
+              <div class="col-12"><label class="form-label">Background</label><textarea id="new_coachee_background" class="form-control" rows="4"></textarea></div>
+              <div class="col-12"><label class="form-label">Education</label><textarea id="new_coachee_edu" class="form-control" rows="2"></textarea></div>
+              <div class="col-12"><label class="form-label">Challenges</label><textarea id="new_coachee_challenges" class="form-control" rows="2"></textarea></div>
+              <div class="col-12"><label class="form-label">Goals</label><textarea id="new_coachee_goals" class="form-control" rows="3"></textarea></div>
+            </div>
+          </form>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-success" id="addCoacheeBtn">Add</button>
+        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-success" id="createCoacheeBtn">Create Coachee</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Coach Modal -->
+  <div class="modal fade" id="addCoachModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Create Coach Profile</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <form id="addCoachForm">
+            <div class="row g-3">
+              <div class="col-md-2"><label class="form-label">Title</label>
+                <select id="new_coach_title" class="form-select"><option>Mr</option><option>Ms</option><option>Dr</option><option>Prof</option></select></div>
+              <div class="col-md-5"><label class="form-label">First Name</label><input id="new_coach_firstname" class="form-control"></div>
+              <div class="col-md-5"><label class="form-label">Last Name</label><input id="new_coach_lastname" class="form-control"></div>
+              <div class="col-md-6"><label class="form-label">Email</label><input id="new_coach_email" class="form-control" type="email"></div>
+              <div class="col-md-6"><label class="form-label">Organization</label>
+                <select id="new_coach_org" class="form-select"><option value="">Loading...</option></select>
+              </div>
+              <div class="col-md-6"><label class="form-label">Photo</label><input id="new_coach_photo" type="file" accept="image/*" class="form-control"></div>
+              <div class="col-md-12"><label class="form-label">Qualifications</label><textarea id="new_coach_qualifications" class="form-control" rows="2"></textarea></div>
+              <div class="col-md-12"><label class="form-label">Profile</label><textarea id="new_coach_profile" class="form-control" rows="3"></textarea></div>
+            </div>
+          </form>
         </div>
+        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" id="createCoachBtn">Create Coach</button></div>
       </div>
     </div>
   </div>
@@ -105,11 +188,42 @@
       <div class="modal-content">
         <div class="modal-header"><h5 id="coacheeDetailName"></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
+          <div id="coachee_summary_block" style="display:none;" class="mb-3">
+            <label class="form-label">Summary</label>
+            <div id="coachee_summary_content" class="form-control" style="min-height:40px"></div>
+          </div>
           <p id="coacheeDetailInfo"></p>
           <h6>Sessions</h6>
           <ul class="list-group mb-3" id="coacheeSessionList"></ul>
           <h6>Assignments</h6>
           <ul class="list-group" id="coacheeAssignmentList"></ul>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button class="btn btn-outline-secondary" id="regenerateSummaryBtn">Regenerate Summary</button>
+          <button class="btn btn-primary" id="saveCoacheeBtn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session Detail Modal -->
+  <div class="modal fade" id="sessionDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header"><h5 id="sessionDetailTitle"></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div><strong>Date:</strong> <span id="sessionDetailDate"></span></div>
+          <div class="mt-2"><strong>Topic:</strong> <div id="sessionDetailTopic"></div></div>
+          <div class="mt-3"><strong>Coach Notes</strong><div id="sessionDetailNotes" class="border rounded p-2 bg-white" style="white-space:pre-wrap"></div></div>
+          <div class="mt-3"><strong>Coach Approach</strong><div id="sessionDetailApproach" class="border rounded p-2 bg-white" style="white-space:pre-wrap"></div></div>
+          <div class="mt-3"><strong>Goals</strong><div id="sessionDetailGoals" class="border rounded p-2 bg-white" style="white-space:pre-wrap"></div></div>
+          <div class="mt-3"><strong>Next Steps</strong><div id="sessionDetailNextSteps" class="border rounded p-2 bg-white" style="white-space:pre-wrap"></div></div>
+          <div class="mt-3"><strong>Attachments</strong><div id="sessionDetailAttachments" class="mt-1"></div></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button class="btn btn-primary" id="saveSessionBtn" style="display:none">Save changes</button>
         </div>
       </div>
     </div>
@@ -117,5 +231,19 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="js/coach_dashboard.js"></script>
+  <!-- Debug overlay toggle (hidden in normal use) -->
+  <button id="debugToggle" title="Debug" style="position:fixed;right:12px;bottom:12px;z-index:1050;border-radius:50%;width:44px;height:44px;background:#222;color:#fff;border:none;box-shadow:0 2px 8px rgba(0,0,0,0.2)">DBG</button>
+  <div id="debugOverlay" style="display:none;position:fixed;right:12px;bottom:64px;z-index:1050;width:420px;max-height:70vh;overflow:auto;background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px;box-shadow:0 6px 30px rgba(0,0,0,0.15)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>Debug: coach</strong>
+      <div><button id="debugRefresh" class="btn btn-sm btn-outline-primary">Refresh</button> <button id="debugClose" class="btn btn-sm btn-outline-secondary">Close</button></div>
+    </div>
+    <div id="debugSummary" style="font-size:13px;color:#333;margin-bottom:8px">Loading...</div>
+    <pre id="debugRaw" style="font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:56vh;overflow:auto;background:#f7f7f7;padding:8px;border-radius:4px;border:1px solid #eee"></pre>
+  </div>
+  <!-- Toast container for non-blocking user messages -->
+  <div aria-live="polite" aria-atomic="true" class="position-fixed top-0 end-0 p-3" style="z-index:1080">
+    <div id="toastContainer"></div>
+  </div>
 </body>
 </html>
