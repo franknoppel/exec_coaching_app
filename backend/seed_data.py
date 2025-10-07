@@ -144,7 +144,7 @@ def seed_data(db: Session):
         for a in range(3):
             status = ["not started", "ongoing", "completed"][a % 3]
             assignment = models.Assignment(
-                assignment_module_id=None,
+                assignment_module=f"Module {a+1}",
                 assignment_description=f"Assignment {a+1} for {coachee.coachee_firstname}",
                 assignment_resources="/uploads/sample_assignment.pdf",
                 assignment_duedate=(datetime.datetime.now() + datetime.timedelta(days=10)).strftime("%m/%d/%Y"),
